@@ -1,0 +1,138 @@
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.testng.annotations.DataProvider;
+import org.testng.annotations.Test;
+import java.io.*;
+import java.util.*;
+
+// Excel Utility Class
+class ExcelUtil {
+    public static final String INPUT_FILE = "ProxyDataSheet.xlsx";
+    public static final String OUTPUT_FILE = "Filtered_ProxyDataSheet.xlsx";
+    
+    public static void filterExcelData() {
+        try (FileInputStream fis = new FileInputStream(INPUT_FILE);
+             Workbook workbook = new XSSFWorkbook(fis);
+             FileOutputStream fos = new FileOutputStream(OUTPUT_FILE)) {
+            
+            Sheet originalSheet = workbook.getSheetAt(0);
+            Sheet filteredSheet = workbook.createSheet("Filtered_Data");
+            
+            int rowCount = 0;
+            for (Row row : originalSheet) {
+                Cell skipCell = row.getCell(6);
+                
+                if (rowCount == 0 || (skipCell != null && "N".equalsIgnoreCase(skipCell.getStringCellValue()))) {
+                    Row newRow = filteredSheet.createRow(rowCount);
+                    for (int i = 0; i < row.getLastCellNum(); i++) {
+                        Cell originalCell = row.getCell(i);
+                        Cell newCell = newRow.createCell(i);
+                        
+                        if (originalCell != null) {
+                            switch (originalCell.getCellType()) {
+                                case STRING:
+                                    newCell.setCellValue(originalCell.getStringCellValue());
+                                    break;
+                                case NUMERIC:
+                                    newCell.setCellValue(originalCell.getNumericCellValue());
+                                    break;
+                                case BOOLEAN:
+                                    newCell.setCellValue(originalCell.getBooleanCellValue());
+                                    break;
+                                default:
+                                    newCell.setCellValue("");
+                            }
+                        }
+                    }
+                    rowCount++;
+                }
+            }
+            
+            workbook.write(fos);
+            System.out.println("Filtered Excel file created successfully.");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    public static List<String> getINAccountNames() {
+        List<String> accountNames = new ArrayList<>();
+        
+        try (FileInputStream fis = new FileInputStream(OUTPUT_FILE);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+            
+            Sheet sheet = workbook.getSheet("Filtered_Data");
+            int accountNameColumn = -1;
+            
+            for (Row row : sheet) {
+                if (accountNameColumn == -1) {
+                    for (Cell cell : row) {
+                        if (cell.getCellType() == CellType.STRING && "IN_AccountName".equalsIgnoreCase(cell.getStringCellValue())) {
+                            accountNameColumn = cell.getColumnIndex();
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                
+                if (accountNameColumn != -1) {
+                    Cell accountNameCell = row.getCell(accountNameColumn);
+                    if (accountNameCell != null && accountNameCell.getCellType() == CellType.STRING) {
+                        accountNames.add(accountNameCell.getStringCellValue());
+                    }
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return accountNames;
+    }
+}
+
+// Test Class Using TestNG
+public class ExcelTest {
+    @DataProvider(name = "filteredDataProvider")
+    public static Iterator<Object[]> filteredDataProvider() {
+        return ExcelUtil.getFilteredData();
+    }
+    
+    @Test(dataProvider = "filteredDataProvider")
+    public void printFilteredData(Object... rowData) {
+        for (Object data : rowData) {
+            System.out.print(data + " | ");
+        }
+        System.out.println();
+    }
+    
+    @Test
+    public List<String> testINAccountNames() {
+        List<String> accountNames = ExcelUtil.getINAccountNames();
+        System.out.println("Extracted IN_AccountNames: " + accountNames);
+        return accountNames;
+    }
+    
+    @Test(dependsOnMethods = "testINAccountNames")
+    public void validateINAccountNames() {
+        List<String> accountNames = testINAccountNames();
+        System.out.println("Validating extracted account names: " + accountNames);
+        
+        for (String accountName : accountNames) {
+            if (accountName.equals("Parent-Teena")) {
+                System.out.println("Validation Passed: Parent-Teena exists");
+            } else {
+                System.out.println("No specific validation for " + accountName);
+            }
+        }
+    }
+    
+    @Test(dataProvider = "filteredDataProvider", dependsOnMethods = "testINAccountNames")
+    public void validateCorrespondingValues(Object... rowData) {
+        List<String> accountNames = testINAccountNames();
+        String inAccountName = rowData[0].toString(); // Assuming IN_AccountName is the first column
+        
+        if (accountNames.contains(inAccountName)) {
+            System.out.println("Validating corresponding values for: " + inAccountName);
+            // Perform any additional validation here
+        }
+    }
+}
