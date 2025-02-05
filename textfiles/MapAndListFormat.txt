@@ -1,0 +1,138 @@
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.testng.annotations.DataProvider;
+import org.testng.annotations.Test;
+import java.io.*;
+import java.util.*;
+
+// Utility Class for Excel Operations
+class ExcelUtil {
+    public static final String INPUT_FILE = "ProxyDataSheet.xlsx";
+    public static final String OUTPUT_FILE = "Filtered_ProxyDataSheet.xlsx";
+
+    public static void filterExcelData() {
+        try (FileInputStream fis = new FileInputStream(INPUT_FILE);
+             Workbook workbook = new XSSFWorkbook(fis);
+             FileOutputStream fos = new FileOutputStream(OUTPUT_FILE)) {
+            
+            Sheet originalSheet = workbook.getSheetAt(0);
+            Sheet filteredSheet = workbook.createSheet("Filtered_Data");
+            
+            int rowCount = 0;
+            for (Row row : originalSheet) {
+                int skipColumnIndex = -1;
+                Row headerRow = originalSheet.getRow(0);
+                
+                for (Cell cell : headerRow) {
+                    if ("Skip".equalsIgnoreCase(cell.getStringCellValue())) {
+                        skipColumnIndex = cell.getColumnIndex();
+                        break;
+                    }
+                }
+                
+                if (skipColumnIndex == -1 || rowCount == 0 || (row.getCell(skipColumnIndex) != null && "N".equalsIgnoreCase(row.getCell(skipColumnIndex).getStringCellValue()))) {
+                    Row newRow = filteredSheet.createRow(rowCount);
+                    for (int i = 0; i < row.getLastCellNum(); i++) {
+                        Cell originalCell = row.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                        Cell newCell = newRow.createCell(i);
+                        
+                        switch (originalCell.getCellType()) {
+                            case STRING:
+                                newCell.setCellValue(originalCell.getStringCellValue());
+                                break;
+                            case NUMERIC:
+                                newCell.setCellValue(originalCell.getNumericCellValue());
+                                break;
+                            case BOOLEAN:
+                                newCell.setCellValue(originalCell.getBooleanCellValue());
+                                break;
+                            default:
+                                newCell.setCellValue("");
+                        }
+                    }
+                    rowCount++;
+                }
+            }
+            
+            workbook.write(fos);
+            System.out.println("Filtered Excel file created successfully.");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static Map<String, List<String>> readFilteredExcelData() {
+        Map<String, List<String>> dataMap = new HashMap<>();
+        try (FileInputStream fis = new FileInputStream(OUTPUT_FILE);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+            
+            Sheet sheet = workbook.getSheet("Filtered_Data");
+            Iterator<Row> iterator = sheet.iterator();
+            Row headerRow = iterator.next(); // First row as header
+            List<String> headers = new ArrayList<>();
+            
+            for (Cell cell : headerRow) {
+                headers.add(cell.getStringCellValue());
+            }
+            
+            while (iterator.hasNext()) {
+                Row row = iterator.next();
+                Cell accountNameCell = row.getCell(0, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                String accountName = accountNameCell.toString();
+                List<String> values = new ArrayList<>();
+                
+                for (int i = 1; i < headers.size(); i++) {
+                    Cell cell = row.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                    values.add(cell.toString());
+                }
+                
+                dataMap.put(accountName, values);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return dataMap;
+    }
+}
+
+public class ExcelTest {
+    @DataProvider(name = "excelDataProvider")
+    public static Object[][] excelDataProvider() {
+        Map<String, List<String>> dataMap = ExcelUtil.readFilteredExcelData();
+        Object[][] data = new Object[dataMap.size()][2];
+        
+        int index = 0;
+        for (Map.Entry<String, List<String>> entry : dataMap.entrySet()) {
+            data[index][0] = entry.getKey();
+            data[index][1] = entry.getValue();
+            index++;
+        }
+        return data;
+    }
+    
+    @Test(dataProvider = "excelDataProvider")
+    public void validateINAccountNames(String accountName, List<String> values) {
+        System.out.println("Fetching all IN_ values for " + accountName + ":");
+        System.out.println("Values: " + values);
+        
+        switch (accountName) {
+            case "Parent-Teena":
+                System.out.println("Performing validation for Parent-Teena");
+                break;
+            case "Child-John":
+                System.out.println("Performing validation for Child-John");
+                break;
+            case "Admin-Roy":
+                System.out.println("Performing validation for Admin-Roy");
+                break;
+            case "User-Anna":
+                System.out.println("Performing validation for User-Anna");
+                break;
+            case "Guest-Mike":
+                System.out.println("Performing validation for Guest-Mike");
+                break;
+            default:
+                System.out.println("No specific validation for " + accountName);
+        }
+    }
+}
